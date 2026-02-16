@@ -11,8 +11,11 @@
 
     <link rel="stylesheet" href="css/style.css">
 
-    <!-- Global Game Logic -->
+    <!-- Global Attributes -->
     <script src="js/app.js"></script>
+
+    <!-- UI Manager -->
+    <script src="js/components/ui-manager.js"></script>
 
     <!-- Components -->
     <script src="js/components/recyclable.js"></script>
@@ -29,31 +32,8 @@
 </head>
 
 <body>
-    <div id="intro">
-        <div class="intro-box">
-            <h1>Reciclagem VR ♻️</h1>
-            <p>
-                Bem-vindo ao simulador de reciclagem!<br><br>
-                <strong>Como jogar:</strong><br>
-                1. Ande pelo ambiente usando W, A, S, D.<br>
-                2. Encontre lixos espalhados no chão.<br>
-                3. Clique no lixo para pegar.<br>
-                4. Leve até a lixeira da cor correta e solte.<br><br>
-                Ajude a limpar o ambiente!
-            </p>
-            <button id="btnStart" class="btn-start">COMEÇAR</button>
-        </div>
-    </div>
-
-    <div id="gameOver" style="display: none;">
-        <div class="intro-box">
-            <h1 id="gameOverTitle">Fim de Jogo</h1>
-            <p id="finalScore" style="font-size: 1.5rem; font-weight: bold; color: white;">Pontuação Final: 0</p>
-            <button id="btnRestart" class="btn-start">JOGAR NOVAMENTE</button>
-        </div>
-    </div>
-
-    <a-scene game-manager renderer="colorManagement: true; physicallyCorrectLights: true; shadowMapEnabled: true"
+    <a-scene ui-manager game-manager
+        renderer="colorManagement: true; physicallyCorrectLights: true; shadowMapEnabled: true"
         fog="type: exponential; color: #bfe7ff; density: 0.018" background="color: #cfefff">
 
         <a-assets>
@@ -61,6 +41,11 @@
             <a-asset-item id="bottlePlastic" src="assets/models/bottle_plastic.glb"></a-asset-item>
             <a-asset-item id="bottleGlass" src="assets/models/bottle.glb"></a-asset-item>
             <a-asset-item id="canMetal" src="assets/models/can.glb"></a-asset-item>
+
+            <a-mixin id="btnMixin" geometry="primitive: plane; width: 1.2; height: 0.4"
+                material="color: #19c37d; shader: flat" text="align: center; color: white; width: 4"
+                animation__hover="property: scale; to: 1.1 1.1 1; startEvents: mouseenter; dur: 200"
+                animation__leave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 200"></a-mixin>
 
         </a-assets>
 
@@ -70,6 +55,41 @@
         </a-entity>
 
         <a-sky color="#9ad6ff"></a-sky>
+
+        <!-- INTRO PANEL 3D -->
+        <a-entity id="introUsingVR" position="0 5.0 -2.5">
+            <a-entity geometry="primitive: plane; width: 10.0; height: 6.0"
+                material="color: #1f2937; shader: flat; opacity: 0.95"></a-entity>
+
+            <a-text value="Reciclagem VR" align="center" position="0 2.0 0.01" width="14" color="#4ade80"></a-text>
+
+            <a-text
+                value="Como jogar:\n\n1. Ande (WASD ou Analogico)\n2. Pegue o lixo (Clique ou Gatilho)\n3. Leve ate a lixeira correta"
+                align="center" position="0 0.4 0.01" width="9.5" color="#e5e7eb"></a-text>
+
+            <a-entity id="startBtn3D" class="clickable" mixin="btnMixin" position="0 -1.8 0.02" scale="2.2 2.2 1"
+                text="value: COMECAR; width: 6"></a-entity>
+        </a-entity>
+
+        <!-- GAME OVER PANEL 3D -->
+        <!-- GAME OVER PANEL 3D -->
+        <a-entity id="gameOverUsingVR" position="0 -10 -1.5" visible="false">
+            <!-- Fundo -->
+            <a-entity geometry="primitive: plane; width: 10.0; height: 6.0"
+                material="color: #1f2937; shader: flat; opacity: 0.95"></a-entity>
+
+            <!-- Título -->
+            <a-text id="titleText3D" value="Fim de Jogo" align="center" position="0 2.0 0.01" width="14"
+                color="#FFF"></a-text>
+
+            <!-- Pontuação -->
+            <a-text id="scoreText3D" value="Pontuacao: 0" align="center" position="0 0.4 0.01" width="12"
+                color="#e5e7eb"></a-text>
+
+            <!-- Botão -->
+            <a-entity id="restartBtn3D" class="clickable" mixin="btnMixin" position="0 -1.8 0.02" scale="2.2 2.2 1"
+                text="value: JOGAR NOVAMENTE; width: 6"></a-entity>
+        </a-entity>
 
         <a-entity distant-hills="count: 12"></a-entity>
 

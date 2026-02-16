@@ -1,21 +1,13 @@
 AFRAME.registerComponent("game-manager", {
     init() {
         const scene = this.el;
-        const intro = document.querySelector("#intro");
-        const btnStart = document.querySelector("#btnStart");
-        const btnRestart = document.querySelector("#btnRestart");
 
-        btnStart.addEventListener("click", () => {
-            intro.style.display = "none";
-            scene.emit("game-start");
+        // UI logic is now handled by ui-manager.js
+        // We can keep this component for other game management tasks if needed
+        // For now, it just listens for the game-start event to focus canvas
+
+        scene.addEventListener("game-start", () => {
             scene.canvas && scene.canvas.focus();
         });
-
-        if (btnRestart) {
-            btnRestart.addEventListener("click", () => {
-                window.location.reload();
-            });
-        }
-
     },
 });
