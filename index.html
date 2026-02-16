@@ -675,10 +675,9 @@
             <a-entity id="camera" camera look-controls wasd-controls="acceleration: 35" position="0 0 0">
                 <a-entity id="hand"></a-entity>
 
-                <a-entity cursor="rayOrigin: mouse" raycaster="objects: .pickable, .clickable"></a-entity>
-
                 <a-entity position="0 0 -1" geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.018"
-                    material="color: #e5e7eb; shader: flat; opacity: 0.85"></a-entity>
+                    material="color: #e5e7eb; shader: flat; opacity: 0.85" cursor="fuse: false"
+                    raycaster="objects: .pickable, .clickable"></a-entity>
 
                 <a-text id="msgText" value="" position="0 -0.5 -1" align="center" width="2" color="#FFF"></a-text>
 
