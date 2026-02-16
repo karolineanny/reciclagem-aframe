@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Reciclagem em A-Frame</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.6.0/dist/aframe-extras.min.js"></script>
+
+    <style>
+        body {
+            button {
+                cursor: pointer;
+            }
+
+            margin: 0;
+            user-select: none;
+            font-family: 'Segoe UI',
+            Tahoma,
+            Geneva,
+            Verdana,
+            sans-serif;
+        }
+
+        #intro,
+        #gameOver {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-align: center;
+        }
+
+        .intro-box {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            max-width: 500px;
+        }
+
+        .intro-box h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #4ade80;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .intro-box p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            color: #e5e7eb;
+        }
+
+        .btn-start {
+            background: #19c37d;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
+            border-radius: 30px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(25, 195, 125, 0.4);
+        }
+
+        .btn-start:hover {
+            transform: scale(1.05);
+            background: #22c55e;
+            box-shadow: 0 6px 20px rgba(34, 197, 94, 0.6);
+        }
+    </style>
+
+    <script>
+        const GAME = {
+            held: null,
+            score: 0,
+            tries: 0,
+            recycledCount: 0,
+            totalItems: 4
+        };
+
+        AFRAME.registerComponent("recyclable", {
+            schema: {
+                type: { type: "string" },
+                name: { type: "string" },
+            },
+
+            init() {
+                this.el.setAttribute("data-type", this.data.type);
+                this.el.setAttribute("data-name", this.data.name);
+
+                const makePickable = () => {
+                    this.el.classList.add("pickable");
+                    const children = this.el.querySelectorAll("*");
+                    children.forEach(c => c.classList.add("pickable"));
+                };
+
+                makePickable();
+                this.el.addEventListener("model-loaded", makePickable);
+                this.el.addEventListener("loaded", makePickable);
+
+                this.el.addEventListener("click", (evt) => {
+                    evt.stopPropagation();
+                    this.toggleHold();
+                });
+            },
+
+            toggleHold() {
+                const hand = document.querySelector("#hand");
+                const itemZone = document.querySelector("#itemZone");
+                if (!hand || !itemZone) return;
+
+                if (GAME.held === this.el) {
+                    GAME.held.removeAttribute("animation__bob");
+                    itemZone.appendChild(GAME.held);
+
+                    GAME.held.object3D.position.set(0, 0.6, 0);
+                    GAME.held.object3D.rotation.set(0, 0, 0);
+
+                    const arrow = GAME.held.querySelector(".arrow");
+                    if (arrow) arrow.setAttribute("visible", true);
+
+                    GAME.held = null;
+
+                    const msg = document.querySelector("#msgText");
+                    if (msg) msg.setAttribute("value", "");
+                    return;
+                }
+
+                if (GAME.held) {
+                    return;
+                }
+
+                GAME.held = this.el;
+                hand.appendChild(this.el);
+
+                const arrow = this.el.querySelector(".arrow");
+                if (arrow) arrow.setAttribute("visible", false);
+
+                this.el.object3D.position.set(0.35, -0.25, -0.8);
+                this.el.object3D.rotation.set(0, 0.4, 0);
+
+                this.el.setAttribute("animation__bob", {
+                    property: "position",
+                    dir: "alternate",
+                    dur: 500,
+                    easing: "easeInOutSine",
+                    loop: true,
+                    to: "0.35 -0.22 -0.8",
+                });
+
+                const msg = document.querySelector("#msgText");
+                if (msg) {
+                    msg.setAttribute("value", "Segurando: " + this.data.name);
+                    msg.setAttribute("color", "#FFF");
+                }
+            },
+        });
+
+        AFRAME.registerComponent("bin-zone", {
+            schema: {
+                accepts: { type: "string" },
+                label: { type: "string" },
+            },
+
+            init() {
+                this.tick = AFRAME.utils.throttleTick(this.tick, 100, this);
+
+                // Propagate .clickable class to children so raycaster hits them
+                const makeClickable = () => {
+                    this.el.classList.add("clickable");
+                    const children = this.el.querySelectorAll("*");
+                    children.forEach(c => c.classList.add("clickable"));
+                };
+                makeClickable();
+                this.el.addEventListener("model-loaded", makeClickable);
+                this.el.addEventListener("loaded", makeClickable);
+
+                this.el.addEventListener("click", () => {
+                    if (GAME.held) {
+                        this.attemptDrop(GAME.held);
+                    } else {
+                        const msg = document.querySelector("#msgText");
+                        if (msg) {
+                            msg.setAttribute("value", "Pegue um objeto primeiro!");
+                            msg.setAttribute("color", "#F00");
+                            setTimeout(() => msg.setAttribute("value", ""), 2000);
+                        }
+                    }
+                });
+            },
+
+            tick() {
+                if (!GAME.held) return;
+
+                const held = GAME.held;
+                const heldWorldPos = new THREE.Vector3();
+                held.object3D.getWorldPosition(heldWorldPos);
+
+                const binWorldPos = new THREE.Vector3();
+                this.el.object3D.getWorldPosition(binWorldPos);
+
+                const dist = heldWorldPos.distanceTo(binWorldPos);
+
+                if (dist < 0.9) {
+                    this.attemptDrop(held);
+                }
+            },
+
+            attemptDrop(held) {
+                if (held.isDropping) return;
+                held.isDropping = true;
+
+                const itemType = held.getAttribute("data-type");
+                const itemName = held.getAttribute("data-name");
+                const msg = document.querySelector("#msgText");
+
+                GAME.tries += 1;
+
+                if (itemType === this.data.accepts) {
+                    GAME.score += 10;
+                    flashBin(this.el, true);
+                    if (msg) {
+                        msg.setAttribute("value", "Sucesso! " + itemName + " descartado corretamente.");
+                        msg.setAttribute("color", "#0F0");
+                    }
+                } else {
+                    GAME.score -= 5;
+                    flashBin(this.el, false);
+                    if (msg) {
+                        msg.setAttribute("value", "Errado! " + itemName + " nao e aqui.");
+                        msg.setAttribute("color", "#F00");
+                    }
+                }
+
+                if (msg) setTimeout(() => msg.setAttribute("value", ""), 2000);
+
+                if (msg) setTimeout(() => msg.setAttribute("value", ""), 2000);
+
+                held.remove();
+                GAME.held = null;
+                GAME.recycledCount++;
+
+                if (GAME.recycledCount >= GAME.totalItems) {
+                    setTimeout(showGameOver, 1000);
+                }
+            },
+        });
+
+        function showGameOver() {
+            const gameOverScreen = document.getElementById("gameOver");
+            const finalScoreEl = document.getElementById("finalScore");
+            const titleEl = document.getElementById("gameOverTitle");
+
+            if (gameOverScreen && finalScoreEl && titleEl) {
+                gameOverScreen.style.display = "flex";
+                finalScoreEl.innerText = "Pontuação Final: " + GAME.score;
+
+                if (GAME.score >= 40) {
+                    titleEl.innerText = "Parabéns! Você é um mestre da reciclagem! 🌟";
+                    titleEl.style.color = "#4ade80";
+                } else if (GAME.score > 0) {
+                    titleEl.innerText = "Bom trabalho! Mas dá para melhorar. 👍";
+                    titleEl.style.color = "#facc15";
+                } else {
+                    titleEl.innerText = "Que pena! Tente reciclar corretamente na próxima. ⚠️";
+                    titleEl.style.color = "#ef4444";
+                }
+            }
+        }
+
+        function flashBin(binEl, ok) {
+            const body = binEl.querySelector(".binBody");
+            if (!body) return;
+
+            const original = body.getAttribute("material").color;
+            body.setAttribute("material", "color", ok ? "#19c37d" : "#ef4444");
+
+            setTimeout(() => body.setAttribute("material", "color", original), 250);
+        }
+
+        AFRAME.registerComponent("reset-game", {
+            init() {
+                this.el.addEventListener("click", () => window.location.reload());
+            },
+        });
+
+        AFRAME.registerComponent("ground-align", {
+            schema: {
+                groundY: { type: "number", default: 0 },
+                extraOffset: { type: "number", default: 0 },
+                once: { type: "boolean", default: true }
+            },
+
+            init() {
+                this._done = false;
+
+                this.el.addEventListener("model-loaded", () => {
+                    if (this.data.once && this._done) return;
+
+                    const mesh = this.el.getObject3D("mesh");
+                    if (!mesh) return;
+
+                    const box = new THREE.Box3().setFromObject(mesh);
+                    const minY = box.min.y;
+
+                    const lift = (-minY) + this.data.extraOffset;
+                    const pos = this.el.getAttribute("position") || { x: 0, y: 0, z: 0 };
+                    this.el.setAttribute("position", `${pos.x} ${this.data.groundY + lift} ${pos.z}`);
+
+                    this._done = true;
+                });
+            }
+        });
+
+        AFRAME.registerComponent("game-manager", {
+            init() {
+                const scene = this.el;
+                const intro = document.querySelector("#intro");
+                const btnStart = document.querySelector("#btnStart");
+                const btnRestart = document.querySelector("#btnRestart");
+
+                btnStart.addEventListener("click", () => {
+                    intro.style.display = "none";
+                    scene.emit("game-start");
+                    scene.canvas && scene.canvas.focus();
+                });
+
+                if (btnRestart) {
+                    btnRestart.addEventListener("click", () => {
+                        window.location.reload();
+                    });
+                }
+
+            },
+        });
+
+        AFRAME.registerComponent("scatter-model", {
+            schema: {
+                model: { type: "string" },
+                count: { type: "int", default: 10 },
+                areaX: { type: "number", default: 30 },
+                areaZ: { type: "number", default: 30 },
+
+                groundY: { type: "number", default: 0 },
+                extraOffset: { type: "number", default: 0 },
+
+                minScale: { type: "number", default: 1 },
+                maxScale: { type: "number", default: 1 },
+            },
+
+            init() {
+                const d = this.data;
+                if (!d.model) return;
+
+                for (let i = 0; i < d.count; i++) {
+                    const el = document.createElement("a-entity");
+                    el.setAttribute("gltf-model", d.model);
+
+                    const x = (Math.random() - 0.5) * d.areaX;
+                    const z = (Math.random() - 0.5) * d.areaZ;
+
+                    const s = d.minScale + Math.random() * (d.maxScale - d.minScale);
+                    const ry = Math.random() * 360;
+
+                    el.setAttribute("position", `${x} ${d.groundY} ${z}`);
+                    el.setAttribute("rotation", `0 ${ry} 0`);
+                    el.setAttribute("scale", `${s} ${s} ${s}`);
+
+                    el.setAttribute("ground-align", `groundY: ${d.groundY}; extraOffset: ${d.extraOffset}; once: true`);
+
+                    this.el.appendChild(el);
+                }
+            },
+        });
+
+        AFRAME.registerComponent("fix-vegetation", {
+            init() {
+                this.el.addEventListener("model-loaded", () => {
+                    const obj = this.el.getObject3D("mesh");
+                    if (!obj) return;
+
+                    obj.traverse((node) => {
+                        if (node.isMesh) {
+                            node.material.side = THREE.DoubleSide;
+                            node.material.transparent = true;
+                            node.material.alphaTest = 0.5;
+                        }
+                    });
+                });
+            },
+        });
+
+        AFRAME.registerComponent("perimeter-scatter", {
+            schema: {
+                model: { type: "string" },
+                countPerSide: { type: "int", default: 8 },
+                width: { type: "number", default: 30 },
+                depth: { type: "number", default: 30 },
+                groundY: { type: "number", default: 0 },
+                extraOffset: { type: "number", default: 0 },
+                skipFront: { type: "boolean", default: true }
+            },
+
+            init() {
+                const d = this.data;
+                if (!d.model) return;
+
+                const halfW = d.width / 2;
+                const halfD = d.depth / 2;
+
+                const createBush = (x, z, ry) => {
+                    const el = document.createElement("a-entity");
+                    el.setAttribute("gltf-model", d.model);
+                    el.setAttribute("position", `${x} ${d.groundY} ${z}`);
+                    el.setAttribute("rotation", `0 ${ry} 0`);
+
+                    const s = 2.2;
+                    el.setAttribute("scale", `${s} ${s} ${s}`);
+
+                    el.setAttribute("ground-align", `groundY: ${d.groundY}; extraOffset: ${d.extraOffset}; once: true`);
+                    el.setAttribute("fix-vegetation", "");
+
+                    this.el.appendChild(el);
+                };
+
+                const sides = [];
+                sides.push({ z: -halfD, xStart: -halfW, xEnd: halfW, var: 'x' }); // BACK
+                sides.push({ x: -halfW, zStart: -halfD, zEnd: halfD, var: 'z' }); // LEFT
+                sides.push({ x: halfW, zStart: -halfD, zEnd: halfD, var: 'z' });  // RIGHT
+
+                if (!d.skipFront) sides.push({ z: halfD, xStart: -halfW, xEnd: halfW, var: 'x' }); // FRONT
+
+                sides.forEach(side => {
+                    for (let i = 0; i < d.countPerSide; i++) {
+                        const t = i / (d.countPerSide - 1);
+                        let posX = 0, posZ = 0;
+
+                        if (side.var === 'x') {
+                            posZ = side.z;
+                            posX = side.xStart + (side.xEnd - side.xStart) * t;
+                        } else {
+                            posX = side.x;
+                            posZ = side.zStart + (side.zEnd - side.zStart) * t;
+                        }
+
+                        const ry = (side.var === 'x') ? 0 : 90;
+                        createBush(posX, posZ, ry);
+                    }
+                });
+            }
+        });
+
+        AFRAME.registerComponent("wavy-ground", {
+            schema: {
+                amp: { type: "number", default: 0.35 },
+                freq: { type: "number", default: 0.25 },
+                amp2: { type: "number", default: 0.18 },
+                freq2: { type: "number", default: 0.75 },
+                seed: { type: "number", default: 7 },
+            },
+
+            init() {
+                const apply = () => {
+                    const mesh = this.el.getObject3D("mesh");
+                    if (!mesh || !mesh.geometry) return;
+
+                    const geom = mesh.geometry;
+                    if (!geom.attributes || !geom.attributes.position) return;
+
+                    const pos = geom.attributes.position;
+                    const { amp, freq, amp2, freq2, seed } = this.data;
+
+                    for (let i = 0; i < pos.count; i++) {
+                        const x = pos.getX(i);
+                        const z = pos.getY(i);
+
+                        const y1 = Math.sin((x + seed) * freq) * amp;
+                        const y2 = Math.cos((z - seed) * freq) * amp * 0.9;
+                        const y3 = Math.sin((x * 0.6 + z * 0.9 + seed) * freq2) * amp2;
+
+                        const r = Math.sqrt(x * x + z * z);
+                        const flatten = Math.max(0, 1 - (r / 10));
+                        const y = (y1 + y2 + y3) * (1 - flatten);
+
+                        pos.setZ(i, y);
+                    }
+
+                    pos.needsUpdate = true;
+                    geom.computeVertexNormals();
+                };
+
+                this.el.addEventListener("object3dset", (e) => {
+                    if (e.detail.type === "mesh") apply();
+                });
+
+                this.el.addEventListener("loaded", apply);
+            }
+        });
+
+        AFRAME.registerComponent("forest-scatter", {
+            schema: {
+                count: { type: "int", default: 150 },
+                radiusMin: { type: "number", default: 18 },
+                radiusMax: { type: "number", default: 45 },
+                groundY: { type: "number", default: 0 },
+            },
+
+            init() {
+                const d = this.data;
+                const rand = (min, max) => min + Math.random() * (max - min);
+
+                const makeTree = (x, z, scale) => {
+                    const tree = document.createElement("a-entity");
+                    tree.setAttribute("position", `${x} ${d.groundY} ${z}`);
+                    tree.setAttribute("rotation", `0 ${Math.random() * 360} 0`);
+                    tree.setAttribute("scale", `${scale} ${scale} ${scale}`);
+
+                    const trunk = document.createElement("a-cylinder");
+                    trunk.setAttribute("height", "1.8");
+                    trunk.setAttribute("radius", "0.18");
+                    trunk.setAttribute("position", "0 0.9 0");
+                    trunk.setAttribute("material", "color: #5b3a29; roughness: 1; metalness: 0;");
+                    trunk.setAttribute("shadow", "cast: true");
+
+                    const crown = document.createElement("a-cone");
+                    crown.setAttribute("height", "2.6");
+                    crown.setAttribute("radius-bottom", "1.25");
+                    crown.setAttribute("radius-top", "0.1");
+                    crown.setAttribute("position", "0 2.6 0");
+                    crown.setAttribute("material", "color: #14532d; roughness: 1; metalness: 0;");
+                    crown.setAttribute("shadow", "cast: true");
+
+                    const crown2 = document.createElement("a-cone");
+                    crown2.setAttribute("height", "2.0");
+                    crown2.setAttribute("radius-bottom", "1.05");
+                    crown2.setAttribute("radius-top", "0.1");
+                    crown2.setAttribute("position", "0 3.5 0");
+                    crown2.setAttribute("material", "color: #166534; roughness: 1; metalness: 0;");
+                    crown2.setAttribute("shadow", "cast: true");
+
+                    tree.appendChild(trunk);
+                    tree.appendChild(crown);
+                    tree.appendChild(crown2);
+
+                    this.el.appendChild(tree);
+                };
+
+                for (let i = 0; i < d.count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = rand(d.radiusMin, d.radiusMax);
+
+                    const x = Math.cos(angle) * dist;
+                    const z = Math.sin(angle) * dist;
+
+                    const s = rand(1.2, 2.8);
+                    makeTree(x, z, s);
+                }
+            }
+        });
+
+        AFRAME.registerComponent("distant-hills", {
+            schema: {
+                count: { type: "int", default: 10 },
+                radiusMin: { type: "number", default: 8 },
+                radiusMax: { type: "number", default: 18 },
+                zMin: { type: "number", default: -40 },
+                zMax: { type: "number", default: -70 },
+                xMin: { type: "number", default: -50 },
+                xMax: { type: "number", default: 50 },
+                baseY: { type: "number", default: -2.8 }
+            },
+
+            init() {
+                const d = this.data;
+                const rand = (a, b) => a + Math.random() * (b - a);
+
+                for (let i = 0; i < d.count; i++) {
+                    const hill = document.createElement("a-sphere");
+                    const r = rand(d.radiusMin, d.radiusMax);
+
+                    hill.setAttribute("radius", r);
+                    hill.setAttribute("position", `${rand(d.xMin, d.xMax)} ${d.baseY} ${rand(d.zMax, d.zMin)}`);
+
+                    const sy = rand(0.25, 0.45);
+                    hill.setAttribute("scale", `1 ${sy} 1`);
+
+                    hill.setAttribute("material", "color: #1f5f3b; roughness: 1; metalness: 0;");
+                    hill.setAttribute("shadow", "receive: true; cast: false");
+                    this.el.appendChild(hill);
+                }
+            }
+        });
+
+
+
+    </script>
+</head>
+
+<body>
+    <div id="intro">
+        <div class="intro-box">
+            <h1>Reciclagem VR ♻️</h1>
+            <p>
+                Bem-vindo ao simulador de reciclagem!<br><br>
+                <strong>Como jogar:</strong><br>
+                1. Ande pelo ambiente usando W, A, S, D.<br>
+                2. Encontre lixos espalhados no chão.<br>
+                3. Clique no lixo para pegar.<br>
+                4. Leve até a lixeira da cor correta e solte.<br><br>
+                Ajude a limpar o ambiente!
+            </p>
+            <button id="btnStart" class="btn-start">COMEÇAR</button>
+        </div>
+    </div>
+
+    <div id="gameOver" style="display: none;">
+        <div class="intro-box">
+            <h1 id="gameOverTitle">Fim de Jogo</h1>
+            <p id="finalScore" style="font-size: 1.5rem; font-weight: bold; color: white;">Pontuação Final: 0</p>
+            <button id="btnRestart" class="btn-start">JOGAR NOVAMENTE</button>
+        </div>
+    </div>
+
+    <a-scene game-manager renderer="colorManagement: true; physicallyCorrectLights: true; shadowMapEnabled: true"
+        fog="type: exponential; color: #bfe7ff; density: 0.018" background="color: #cfefff">
+
+        <a-assets>
+            <a-asset-item id="grassPatch" src="assets/models/grass_patch.glb"></a-asset-item>
+            <a-asset-item id="bush" src="assets/models/Hedge.glb"></a-asset-item>
+            <a-asset-item id="bottlePlastic" src="assets/models/bottle_plastic.glb"></a-asset-item>
+            <a-asset-item id="bottleGlass" src="assets/models/bottle.glb"></a-asset-item>
+            <a-asset-item id="canMetal" src="assets/models/can.glb"></a-asset-item>
+
+        </a-assets>
+
+        <a-entity light="type: ambient; intensity: 0.45; color: #ffffff"></a-entity>
+        <a-entity light="type: directional; intensity: 1.05; color: #fff6db" position="8 14 6"
+            shadow="cast: true; mapSizeWidth: 2048; mapSizeHeight: 2048; cameraLeft: -40; cameraRight: 40; cameraTop: 40; cameraBottom: -40">
+        </a-entity>
+
+        <a-sky color="#9ad6ff"></a-sky>
+
+        <a-entity distant-hills="count: 12"></a-entity>
+
+        <a-entity id="ground"
+            geometry="primitive: plane; width: 100; height: 100; segmentsWidth: 150; segmentsHeight: 150"
+            rotation="-90 0 0" material="color: #224a1e; roughness: 1; metalness: 0; side: double; transparent: false"
+            wavy-ground="amp: 0.40; freq: 0.22; amp2: 0.18; freq2: 0.75; seed: 11" shadow="receive: true">
+        </a-entity>
+
+        <a-entity
+            scatter-model="model: #grassPatch; count: 2000; areaX: 90; areaZ: 90; groundY: 0; extraOffset: 0.01; minScale: 0.7; maxScale: 1.35">
+        </a-entity>
+
+        <a-entity
+            perimeter-scatter="model: #bush; countPerSide: 18; width: 56; depth: 56; groundY: 0; extraOffset: 0; skipFront: false">
+        </a-entity>
+
+        <a-entity forest-scatter="count: 400; radiusMin: 32; radiusMax: 48; groundY: 0"></a-entity>
+
+        <a-entity id="rig" position="0 4 14">
+            <a-entity id="camera" camera look-controls wasd-controls="acceleration: 35" position="0 0 0">
+                <a-entity id="hand"></a-entity>
+
+                <a-entity cursor="rayOrigin: mouse" raycaster="objects: .pickable, .clickable"></a-entity>
+
+                <a-entity position="0 0 -1" geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.018"
+                    material="color: #e5e7eb; shader: flat; opacity: 0.85"></a-entity>
+
+                <a-text id="msgText" value="" position="0 -0.5 -1" align="center" width="2" color="#FFF"></a-text>
+
+
+
+            </a-entity>
+        </a-entity>
+
+        <a-entity id="bins" position="0 0.5 -8">
+
+            <a-box position="0 0.05 0" width="7.2" height="0.1" depth="1.8"
+                material="color: #1f2937; roughness: 1; metalness: 0" shadow="receive: true"></a-box>
+
+            <a-entity class="clickable" position="-2.4 0 0" bin-zone="accepts: paper; label: PAPEL (Azul)">
+                <a-box class="binBody" position="0 0.65 0" width="1.2" height="1.3" depth="0.9"
+                    material="color: #2563eb; roughness: 0.9; metalness: 0.05" shadow="cast: true; receive: true">
+                </a-box>
+                <a-box position="0 1.35 0" width="1.25" height="0.18" depth="0.95"
+                    material="color: #1d4ed8; roughness: 0.9; metalness: 0.05" shadow="cast: true"></a-box>
+                <a-box position="0 1.35 0.18" width="0.75" height="0.06" depth="0.25"
+                    material="color: #0b1220; roughness: 1; metalness: 0"></a-box>
+            </a-entity>
+
+            <a-entity class="clickable" position="-0.8 0 0" bin-zone="accepts: plastic; label: PLÁSTICO (Vermelho)">
+                <a-box class="binBody" position="0 0.65 0" width="1.2" height="1.3" depth="0.9"
+                    material="color: #dc2626; roughness: 0.9; metalness: 0.05" shadow="cast: true; receive: true">
+                </a-box>
+                <a-box position="0 1.35 0" width="1.25" height="0.18" depth="0.95"
+                    material="color: #b91c1c; roughness: 0.9; metalness: 0.05" shadow="cast: true"></a-box>
+                <a-cylinder position="0 1.35 0.18" radius="0.22" height="0.08"
+                    material="color: #0b1220; roughness: 1; metalness: 0"></a-cylinder>
+            </a-entity>
+
+            <a-entity class="clickable" position="0.8 0 0" bin-zone="accepts: glass; label: VIDRO (Verde)">
+                <a-box class="binBody" position="0 0.65 0" width="1.2" height="1.3" depth="0.9"
+                    material="color: #16a34a; roughness: 0.9; metalness: 0.05" shadow="cast: true; receive: true">
+                </a-box>
+                <a-box position="0 1.35 0" width="1.25" height="0.18" depth="0.95"
+                    material="color: #15803d; roughness: 0.9; metalness: 0.05" shadow="cast: true"></a-box>
+                <a-box position="0 1.35 0.18" width="0.55" height="0.06" depth="0.35"
+                    material="color: #0b1220; roughness: 1; metalness: 0"></a-box>
+            </a-entity>
+
+            <a-entity class="clickable" position="2.4 0 0" bin-zone="accepts: metal; label: METAL (Amarelo)">
+                <a-box class="binBody" position="0 0.65 0" width="1.2" height="1.3" depth="0.9"
+                    material="color: #facc15; roughness: 0.85; metalness: 0.1" shadow="cast: true; receive: true">
+                </a-box>
+                <a-box position="0 1.35 0" width="1.25" height="0.18" depth="0.95"
+                    material="color: #eab308; roughness: 0.85; metalness: 0.1" shadow="cast: true"></a-box>
+                <a-cylinder position="0 1.35 0.18" radius="0.28" height="0.08"
+                    material="color: #0b1220; roughness: 1; metalness: 0"></a-cylinder>
+            </a-entity>
+
+        </a-entity>
+
+        <a-entity id="itemZone" position="0 0 0">
+
+            <a-entity position="-8 0.4 6" rotation="0 45 0" recyclable="type: glass; name: Garrafa de Vidro">
+                <a-entity gltf-model="#bottleGlass" scale="3.5 3.5 3.5"
+                    material="color: #22c55e; side: double; transparent: true; opacity: 0.8">
+                </a-entity>
+                <a-entity class="arrow" position="0 1.8 0"
+                    animation="property: position; to: 0 2.2 0; dir: alternate; loop: true; dur: 1000; easing: easeInOutSine">
+                    <a-cone radius-bottom="0.01" radius-top="0.15" height="0.3" color="#ffff00" rotation="180 0 0"
+                        material="emissive: #ff0; emissiveIntensity: 0.5"></a-cone>
+                </a-entity>
+            </a-entity>
+
+            <a-entity position="10 0.4 -5" rotation="0 -30 0" recyclable="type: plastic; name: Garrafa Plastica">
+                <a-entity gltf-model="#bottlePlastic" scale="0.3 0.3 0.3"
+                    material="color: #3b82f6; side: double; transparent: true; opacity: 0.8">
+                </a-entity>
+                <a-entity class="arrow" position="0 1.8 0"
+                    animation="property: position; to: 0 2.2 0; dir: alternate; loop: true; dur: 1000; easing: easeInOutSine; delay: 250">
+                    <a-cone radius-bottom="0.01" radius-top="0.15" height="0.3" color="#ffff00" rotation="180 0 0"
+                        material="emissive: #ff0; emissiveIntensity: 0.5"></a-cone>
+                </a-entity>
+            </a-entity>
+
+            <a-entity position="-4 0.4 -12" rotation="0 0 0" recyclable="type: metal; name: Lata de Metal">
+                <a-entity gltf-model="#canMetal" scale="0.5 1.5 0.5" material="side: double"></a-entity>
+
+                <a-entity class="arrow" position="0 1.8 0"
+                    animation="property: position; to: 0 2.2 0; dir: alternate; loop: true; dur: 1000; easing: easeInOutSine; delay: 500">
+                    <a-cone radius-bottom="0.01" radius-top="0.15" height="0.3" color="#ffff00" rotation="180 0 0"
+                        material="emissive: #ff0; emissiveIntensity: 0.5"></a-cone>
+                </a-entity>
+            </a-entity>
+
+            <a-entity position="6 0.4 10" rotation="0 0 0" recyclable="type: paper; name: Papel Amassado">
+                <a-icosahedron radius="0.2" color="#f1f5f9" detail="1" flat-shading="true" scale="1 0.8 1">
+                </a-icosahedron>
+
+                <a-entity class="arrow" position="0 1.8 0"
+                    animation="property: position; to: 0 2.2 0; dir: alternate; loop: true; dur: 1000; easing: easeInOutSine; delay: 750">
+                    <a-cone radius-bottom="0.01" radius-top="0.15" height="0.3" color="#ffff00" rotation="180 0 0"
+                        material="emissive: #ff0; emissiveIntensity: 0.5"></a-cone>
+                </a-entity>
+            </a-entity>
+
+        </a-entity>
+
+    </a-scene>
+
+</body>
+
+</html>
