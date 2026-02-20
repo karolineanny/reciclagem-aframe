@@ -7,7 +7,6 @@ AFRAME.registerComponent("bin-zone", {
     init() {
         this.tick = AFRAME.utils.throttleTick(this.tick, 100, this);
 
-        // Propagate .clickable class to children so raycaster hits them
         const makeClickable = () => {
             this.el.classList.add("clickable");
             const children = this.el.querySelectorAll("*");

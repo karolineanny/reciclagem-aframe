@@ -52,18 +52,14 @@ AFRAME.registerComponent("recyclable", {
 
         GAME.held = this.el;
 
-        // Determine where to attach: Controller or Desktop Hand
         let parentStr = "#hand";
         let pos = { x: 0.35, y: -0.25, z: -0.8 };
 
-        // If cursorEl is a controller (has laser-controls or specific ID)
         if (cursorEl && (cursorEl.getAttribute("laser-controls") || cursorEl.id.includes("Hand"))) {
             cursorEl.appendChild(this.el);
-            // Position closer to controller
             this.el.object3D.position.set(0, 0, -0.15);
             this.el.object3D.rotation.set(-45, 0, 0);
         } else {
-            // Desktop / Gaze
             hand.appendChild(this.el);
             this.el.object3D.position.set(0.35, -0.25, -0.8);
             this.el.object3D.rotation.set(0, 0.4, 0);
