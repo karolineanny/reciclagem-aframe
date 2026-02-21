@@ -28,6 +28,7 @@
     <script src="js/components/wavy-ground.js"></script>
     <script src="js/components/forest-scatter.js"></script>
     <script src="js/components/distant-hills.js"></script>
+    <script src="js/components/thumbstick-movement.js"></script>
 </head>
 
 <body>
@@ -108,7 +109,7 @@
         <a-entity forest-scatter="count: 400; radiusMin: 32; radiusMax: 48; groundY: 0"></a-entity>
 
         <a-entity id="rig" movement-controls="constrainToNavMesh: false; speed: 0.3" position="0 4 14">
-            <a-entity id="camera" camera look-controls position="0 0 0">
+            <a-entity id="camera" camera look-controls position="0 1.6 0">
                 <a-entity id="hand"></a-entity>
 
                 <a-entity position="0 0 -1" geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.018"
@@ -119,10 +120,10 @@
 
             </a-entity>
 
-            <a-entity id="leftHand" laser-controls="hand: left"
-                raycaster="objects: .pickable, .clickable; far: 5"></a-entity>
-            <a-entity id="rightHand" laser-controls="hand: right"
-                raycaster="objects: .pickable, .clickable; far: 5"></a-entity>
+            <a-entity id="leftHand" laser-controls="hand: left" raycaster="objects: .pickable, .clickable; far: 30"
+                thumbstick-movement="speed: 5"></a-entity>
+            <a-entity id="rightHand" laser-controls="hand: right" raycaster="objects: .pickable, .clickable; far: 30"
+                thumbstick-movement="speed: 5"></a-entity>
         </a-entity>
 
         <a-entity id="bins" position="0 0.5 -8">
